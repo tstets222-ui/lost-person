@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>失蹤人士資料表 Missing Person Information Form</title>
+    <!-- 引入 Tailwind CSS 作為快速精美排版 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 html2canvas 處理截圖導出 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* 自訂微調 */
+        body { background-color: #f3f4f6; font-family: "PingFang HK", "Microsoft JhengHei", sans-serif; }
+        .mic-btn { transition: transform 0.1s; }
+        .mic-btn:active { transform: scale(0.9); }
+        .recording { animation: pulse 1.5s infinite; color: #ef4444; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="capture-area" class="max-w-xl mx-auto bg-white p-6 rounded-xl shadow-lg">
+        <!-- 表頭 -->
+        <div class="border-b-2 border-red-600 pb-4 mb-6">
+            <h1 class="text-2xl font-bold text-gray-800 text-center">失蹤人士資料表</h1>
+            <h2 class="text-sm text-gray-500 text-center uppercase tracking-wide">Missing Person Information Form</h2>
+        </div>
+
+        <form id="missing-form" class="space-y-5">
+            <!-- 區塊 1: 失蹤人仕特徵 -->
+            <div class="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500 mb-4">
+                <h3 class="font-bold text-blue-800">失蹤人仕特徵 Missing Person Characteristics</h3>
+            </div>
+
+            <!-- 動態生成輸入欄位的容器 -->
+            <div id="fields-container-1" class="space-y-4"></div>
+
+            <!-- 區塊 2: 呈報者資料 -->
+            <div class="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500 mb-4 mt-8">
+                <h3 class="font-bold text-blue-800">呈報者資料 Informant Information</h3>
+            </div>
+            
+            <div id="fields-container-2" class="space-y-4"></div>
+        </form>
+    </div>
+
+    <!-- 操作按鈕 (不包含在截圖內) -->
+    <div class="max-w-xl mx-auto mt-6 flex gap-4">
+        <button type="button" onclick="exportAndShare()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex justify-center items-center gap-2 text-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+            導出圖片並發送 Email
+        </button>
+    </div>
+
+    <script>
+        // 表單欄位設定
+        const section1Fields = [
+            { id: 'name', label: 'Name 姓名', type: 'text', voice: true },
+            { id: 'gender', label: 'Gender 性別', type: 'text', voice: true },
+            { id: 'age', label: 'Age 年齡', type: 'text', voice: true },
+            { id: 'dressing', label: 'Dressing 衣著', type: 'text', voice: true },
+            { id: 'medical', label: 'Medical History 病患記錄', type: 'text', voice: true },
+            { id: 'missing_history', label: 'Missing History 失蹤記錄', type: 'text', voice: true },
+            { id: 'last_located', label: 'If yes, where he/she been located last time 如有，上一次於那裡尋回', type: 'text', voice: true },
+            { id: 'frequent_places', label: 'Where the missing person travels frequently 失蹤者經常到的車站地方', type: 'text', voice: true },
+            { id: 'last_contact', label: 'Last station/place that lost contact with the missing person? 最後聯絡時，失蹤者身處的車站/地方', type: 'text', voice: true },
+            { id: 'gps', label: 'Any GPS function on his/her mobile phone can help to locate the missing person 有否衛星定位功能於失蹤者手機上可提供協助', type: 'text', voice: true },
+            { id: 'police_report', label: 'Police Report no. (if applicable) 報案編號 (如適用)', type: 'text', voice: true }
+        ];
+
+        const section2Fields = [
+            { id: 'informant_name', label: 'Name 姓名', type: 'text', voice: true },
+            { id: 'contact_no', label: 'Contact no. 電話', type: 'tel', voice: true },
+            { id: 'report_time', label: 'Report Date and Time 呈報日期及時間', type: 'datetime-local', voice: false },
+            { id: 'relationship', label: 'Relationship with the Missing Person (if applicable) 與失蹤者關係 (如適用)', type: 'text', voice: true }
+        ];
+
+        function renderFields(fields, containerId) {
+            const container = document.getElementById(containerId);
+            fields.forEach(f => {
+                let html = `
+                <div class="flex flex-col">
+                    <label class="text-sm font-semibold text-gray-700 mb-1">${f.label}</label>
+                    <div class="relative flex items-center">
+                        <input type="${f.type}" id="${f.id}" class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-12 text-gray-800" placeholder="請輸入...">
+                        ${f.voice ? `
+                        <button type="button" onclick="startVoiceInput('${f.id}', this)" class="mic-btn absolute right-2 p-2 text-gray-400 hover:text-blue-600 bg-white rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        ` : ''}
+                    </div>
+                </div>`;
+                container.innerHTML += html;
+            });
+        }
+
+        renderFields(section1Fields, 'fields-container-1');
+        renderFields(section2Fields, 'fields-container-2');
+
+        // 自動填入目前時間至呈報時間欄位
+        document.getElementById('report_time').value = new Date().toISOString().slice(0, 16);
+
+        // 語音輸入功能 (Web Speech API)
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        function startVoiceInput(inputId, btnElement) {
+            if (!SpeechRecognition) {
+                alert("你的瀏覽器不支援語音輸入，請使用 Chrome 或 Safari。");
+                return;
+            }
+
+            const inputField = document.getElementById(inputId);
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'zh-HK'; // 設定為廣東話/繁體中文
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = function() {
+                btnElement.classList.add('recording');
+                inputField.placeholder = "聆聽中...";
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                // 如果欄位已有文字，則附加在後面
+                inputField.value = inputField.value ? inputField.value + " " + transcript : transcript;
+            };
+
+            recognition.onerror = function(event) {
+                console.error("語音識別錯誤: ", event.error);
+                inputField.placeholder = "請輸入...";
+            };
+
+            recognition.onend = function() {
+                btnElement.classList.remove('recording');
+                inputField.placeholder = "請輸入...";
+            };
+
+            recognition.start();
+        }
+
+        // 導出截圖並分享
+        async function exportAndShare() {
+            const captureArea = document.getElementById('capture-area');
+            const originalBorder = captureArea.style.border;
+            
+            try {
+                // 生成圖片
+                const canvas = await html2canvas(captureArea, { scale: 2, useCORS: true });
+                
+                canvas.toBlob(async (blob) => {
+                    const file = new File([blob], "Missing_Person_Form.png", { type: "image/png" });
+
+                    // 檢查手機是否支援 Web Share API
+                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        try {
+                            await navigator.share({
+                                files: [file],
+                                title: '失蹤人士資料表',
+                                text: '請查閱附上的失蹤人士資料表。寄出時請確認收件人為 tst@mtr.com.hk'
+                            });
+                        } catch (error) {
+                            console.log('分享取消或失敗:', error);
+                        }
+                    } else {
+                        // 如果在電腦上或不支援 Share API，則降級為直接下載
+                        const link = document.createElement('a');
+                        link.href = canvas.toDataURL("image/png");
+                        link.download = "Missing_Person_Form.png";
+                        link.click();
+                        alert("已下載圖片。請手動建立 Email 並加入圖片寄至 tst@mtr.com.hk");
+                    }
+                }, "image/png");
+
+            } catch (err) {
+                console.error("截圖失敗: ", err);
+                alert("導出圖片時發生錯誤。");
+            }
+        }
+    </script>
+</body>
+</html>
